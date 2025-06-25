@@ -1,31 +1,10 @@
 # Online Voting System
 
-A secure, modern web-based voting system built with Next.js, TypeScript, and SQL Server for conducting transparent elections .
-
-## 🚀 Features
-
-- **Real-time Election Management**: Create and manage elections with start/end times
-- **Candidate Registration**: Add candidates with party affiliations and constituencies
-- **Secure Voting**: One vote per CNIC per election with validation
-- **Live Results**: Real-time vote counting and results display
-- **Pakistani Context**: Built-in support for Pakistani constituencies and electoral system
-- **Responsive Design**: Modern UI that works on all devices
-
-## 🛠️ Technology Stack
-
-- **Frontend**: Next.js 14, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, Server Actions
-- **Database**: Microsoft SQL Server with sqlcmd
-- **UI Components**: Shadcn/ui
-- **Authentication**: CNIC-based voter validation
-
 ## 📋 Prerequisites
 
 - Node.js 18+
 - Microsoft SQL Server (Local/Express)
 - SQL Server Command Line Utilities (sqlcmd)
-
-## ⚡ Quick Start
 
 ### 🔄 Setting Up from GitHub
 
@@ -80,66 +59,12 @@ npm run build
 npm start
 ```
 
-#### 6. Access the System
-
-Open your browser and go to: `http://localhost:3000`
-
-### 🚀 One-Command Setup (After Clone)
-
-For experienced users with MS SQL Server already running:
-
-```bash
-npm install && copy .env.local.template .env.local && sqlcmd -S localhost -E -i scripts/database-setup.sql && sqlcmd -S localhost -E -d VotingSystemDB -i scripts/insert-sample-data.sql && npm run dev
-```
-
-Then visit `http://localhost:3000`
-
-### 🎯 Quick Test
-
-1. Go to **Elections** page
-2. Click on any active election
-3. Click **Vote Now**
-4. Enter any valid CNIC format (e.g., `12345-1234567-1`)
-5. Select a candidate and submit your vote
-6. Check **Results** page to see your vote counted
-
-## 🗳️ How to Use
-
-### For Administrators
-
-1. **Create Election**: Set election details, dates, and voting period
-2. **Add Candidates**: Register candidates with party and constituency info
-3. **Monitor Results**: View real-time voting statistics
-
-### For Voters
-
-1. **Browse Elections**: View active elections
-2. **Cast Vote**: Select candidate and submit with CNIC verification
-3. **View Results**: Check election outcomes after voting ends
-
-## 📁 Project Structure
-
-```
-votingsystem/
-├── src/app/           # Next.js pages and API routes
-├── lib/               # Database logic and server actions
-├── components/        # Reusable UI components
-├── scripts/          # Database setup scripts
-└── public/           # Static assets
-```
-
 ## 🔧 Key Components
 
 - **`lib/actions.ts`**: Server actions for elections, voting, candidates
 - **`lib/db-sqlcmd.ts`**: SQL Server database connection and query execution
 - **`scripts/database-setup.sql`**: Complete database schema
 - **`src/app/elections/`**: Election browsing and voting pages
-
-
-
-## 🔧 Troubleshooting
-
-### Common Setup Issues
 
 **Database Connection Error:**
 
@@ -155,10 +80,8 @@ sqlcmd -S localhost -E -Q "CREATE DATABASE VotingSystemDB"
 sqlcmd -S localhost -E -i scripts/database-setup.sql
 ```
 
-
 ### Need Help?
 
 - Check that all dependencies are installed: `npm install`
 - Verify Node.js version: `node --version` (should be 18+)
 - Ensure SQL Server is accessible: `sqlcmd -S localhost -E -Q "SELECT @@VERSION"`
-
