@@ -135,29 +135,7 @@ votingsystem/
 - **`scripts/database-setup.sql`**: Complete database schema
 - **`src/app/elections/`**: Election browsing and voting pages
 
-## 📊 Database Schema
 
-Core tables:
-
-- `Elections`: Election metadata and timing
-- `Candidates`: Candidate information and party affiliation
-- `Voters`: Voter registration data
-- `OnlineVotes`: Secure vote records with CNIC validation
-
-## 🔒 Security Features
-
-- **CNIC Validation**: Prevents duplicate voting
-- **Vote Integrity**: Secure vote casting with foreign key constraints
-- **SQL Injection Protection**: Parameterized queries throughout
-- **Election Timing**: Automatic status updates based on voting periods
-
-## 🚀 Deployment
-
-For production deployment:
-
-1. Configure production SQL Server connection
-2. Set environment variables in production
-3. Build and deploy: `npm run build && npm start`
 
 ## 🔧 Troubleshooting
 
@@ -177,17 +155,6 @@ sqlcmd -S localhost -E -Q "CREATE DATABASE VotingSystemDB"
 sqlcmd -S localhost -E -i scripts/database-setup.sql
 ```
 
-**Permission Issues:**
-
-- Run Command Prompt as Administrator
-- Or use SQL Server Authentication instead of Windows Authentication
-
-**Port 3000 Already in Use:**
-
-```bash
-# Use different port
-npm run dev -- -p 3001
-```
 
 ### Need Help?
 
@@ -195,14 +162,3 @@ npm run dev -- -p 3001
 - Verify Node.js version: `node --version` (should be 18+)
 - Ensure SQL Server is accessible: `sqlcmd -S localhost -E -Q "SELECT @@VERSION"`
 
-## 🤝 Contributing
-
-This project is designed for educational and demonstration purposes. Feel free to extend functionality or adapt for other electoral systems.
-
-## 📄 License
-
-Built for academic/educational use. Adapt as needed for your requirements.
-
----
-
-**Ready for Production** ✅ - Clean codebase, working features, comprehensive documentation.
