@@ -5,27 +5,23 @@ import { query, Election, Candidate, Vote, VoteResult, Voter } from "./db";
 // Get all elections with their status
 export async function getElections() {
 	try {
-		const sqlQuery = `
-      SELECT 
-        ElectionID,
-        ElectionName,
-        ElectionType,
-        ElectionDate,
-        ElectionYear,
-        Status,
-        VotingStart,
-        VotingEnd
-      FROM Elections
-      ORDER BY VotingStart DESC
-    `;
+		const sqlQuery = `SELECT ElectionID, ElectionName, ElectionType, ElectionDate, ElectionYear, Status, VotingStart, VotingEnd FROM Elections ORDER BY VotingStart DESC`;
 
 		const result = await query(sqlQuery);
-		console.log("Raw election data:", result.rows);
+
 		// Add computed status based on dates
 		return result.rows.map((election: any) => {
 			const now = new Date();
-			const startDate = new Date(election.VotingStart || election.col6);
-			const endDate = new Date(election.VotingEnd || election.col7);
+			// Parse dates more carefully to handle SQL Server datetime format
+			const parseDbDate = (dateStr: any) => {
+				if (!dateStr) return new Date(0); // Far past date
+				// Handle both direct string and fallback column formats
+				const cleanDate = dateStr.toString().replace(/\.\d{3}$/, ""); // Remove milliseconds
+				return new Date(cleanDate);
+			};
+
+			const startDate = parseDbDate(election.VotingStart || election.col6);
+			const endDate = parseDbDate(election.VotingEnd || election.col7);
 
 			let computed_status: "upcoming" | "active" | "completed";
 			if (now < startDate) {
@@ -61,37 +57,89 @@ export async function getElections() {
 	}
 }
 
+// Get a specific election by ID
+export async function getElectionById(electionId: number) {
+	try {
+		const sqlQuery = `SELECT ElectionID, ElectionName, ElectionType, ElectionDate, ElectionYear, Status, VotingStart, VotingEnd FROM Elections WHERE ElectionID = ?`;
+
+		const result = await query(sqlQuery, [electionId]);
+
+		if (result.rows.length === 0) {
+			return null;
+		}
+
+		const election = result.rows[0];
+		// Add computed status based on dates
+		const now = new Date();
+
+		// Parse dates more carefully to handle SQL Server datetime format
+		const parseDbDate = (dateStr: any) => {
+			if (!dateStr) return new Date(0); // Far past date
+			// Handle both direct string and fallback column formats
+			const cleanDate = dateStr.toString().replace(/\.\d{3}$/, ""); // Remove milliseconds
+			return new Date(cleanDate);
+		};
+
+		const startDate = parseDbDate(election.VotingStart || election.col6);
+		const endDate = parseDbDate(election.VotingEnd || election.col7);
+
+		let computed_status: "upcoming" | "active" | "completed";
+		if (now < startDate) {
+			computed_status = "upcoming";
+		} else if (now >= startDate && now <= endDate) {
+			computed_status = "active";
+		} else {
+			computed_status = "completed";
+		}
+
+		return {
+			ElectionID: election.ElectionID || election.col0,
+			ElectionName: election.ElectionName || election.col1,
+			ElectionType: election.ElectionType || election.col2,
+			ElectionDate: election.ElectionDate || election.col3,
+			ElectionYear: election.ElectionYear || election.col4,
+			Status:
+				computed_status === "upcoming"
+					? "Upcoming"
+					: computed_status === "active"
+					? "Active"
+					: "Completed",
+			VotingStart: election.VotingStart || election.col6,
+			VotingEnd: election.VotingEnd || election.col7,
+			computed_status,
+		} as Election & {
+			computed_status: "upcoming" | "active" | "completed";
+		};
+	} catch (error) {
+		console.error("Error fetching election by ID:", error);
+		return null;
+	}
+}
+
 // Get candidates for a specific election
 export async function getCandidatesByElection(electionId: number) {
 	try {
-		const sqlQuery = `
-      SELECT 
-        CandidateID,
-        CandidateName,
-        PartyName,
-        ElectionSymbol,
-        Constituency,
-        Province,
-        CandidateAge,
-        ElectionID
-      FROM Candidates
-      WHERE ElectionID = ?
-      ORDER BY CandidateName
-    `;
+		const sqlQuery = `SELECT CandidateID, CandidateName, PartyName, ElectionSymbol, Constituency, Province, CandidateAge, ElectionID FROM Candidates WHERE ElectionID = ? ORDER BY CandidateName`;
 
 		const result = await query(sqlQuery, [electionId]);
-		console.log("Raw candidate data:", result.rows);
 
-		return result.rows.map((candidate: any) => ({
-			CandidateID: candidate.CandidateID || candidate.col0,
-			CandidateName: candidate.CandidateName || candidate.col1,
-			PartyName: candidate.PartyName || candidate.col2,
-			ElectionSymbol: candidate.ElectionSymbol || candidate.col3,
-			Constituency: candidate.Constituency || candidate.col4,
-			Province: candidate.Province || candidate.col5,
-			CandidateAge: candidate.CandidateAge || candidate.col6,
-			ElectionID: candidate.ElectionID || candidate.col7,
-		})) as Candidate[];
+		return result.rows
+			.map((candidate: any) => ({
+				CandidateID: candidate.CandidateID || candidate.col0,
+				CandidateName:
+					candidate.CandidateName || candidate.col1 || "Unknown Candidate",
+				PartyName: candidate.PartyName || candidate.col2 || "Independent",
+				ElectionSymbol: candidate.ElectionSymbol || candidate.col3 || "",
+				Constituency: candidate.Constituency || candidate.col4 || "Unknown",
+				Province: candidate.Province || candidate.col5 || "Unknown",
+				CandidateAge: candidate.CandidateAge || candidate.col6 || 0,
+				ElectionID: candidate.ElectionID || candidate.col7 || electionId,
+			}))
+			.filter(
+				(candidate: any) =>
+					candidate.CandidateID &&
+					candidate.CandidateName !== "Unknown Candidate"
+			) as Candidate[];
 	} catch (error) {
 		console.error("Error fetching candidates:", error);
 		return [];
@@ -108,39 +156,16 @@ export async function createElection(
 	votingEnd: string
 ) {
 	try {
-		console.log("Creating election with data:", {
-			electionName,
-			electionType,
-			electionDate,
-			electionYear,
-			votingStart,
-			votingEnd,
-		});
+		// Format dates properly for SQL Server without timezone conversion
+		// Keep the dates in local timezone as entered by user
+		const formattedElectionDate = electionDate; // Already in YYYY-MM-DD format from date input
+		const formattedVotingStart = votingStart.replace("T", " "); // Convert from YYYY-MM-DDTHH:MM to YYYY-MM-DD HH:MM
+		const formattedVotingEnd = votingEnd.replace("T", " "); // Convert from YYYY-MM-DDTHH:MM to YYYY-MM-DD HH:MM
 
-		// Format dates properly for SQL Server
-		// Convert date inputs to SQL Server format
-		const formattedElectionDate = new Date(electionDate)
-			.toISOString()
-			.split("T")[0]; // YYYY-MM-DD
-		const formattedVotingStart = new Date(votingStart)
-			.toISOString()
-			.slice(0, 19)
-			.replace("T", " "); // YYYY-MM-DD HH:MM:SS
-		const formattedVotingEnd = new Date(votingEnd)
-			.toISOString()
-			.slice(0, 19)
-			.replace("T", " "); // YYYY-MM-DD HH:MM:SS
-
-		console.log("Formatted dates:", {
-			formattedElectionDate,
-			formattedVotingStart,
-			formattedVotingEnd,
-		});
-
-		// Determine initial status based on dates
+		// Determine initial status based on dates (keeping in local timezone)
 		const now = new Date();
-		const startDate = new Date(votingStart);
-		const endDate = new Date(votingEnd);
+		const startDate = new Date(votingStart); // Local datetime-local input
+		const endDate = new Date(votingEnd); // Local datetime-local input
 
 		let status: string;
 		if (now < startDate) {
@@ -151,22 +176,7 @@ export async function createElection(
 			status = "Completed";
 		}
 
-		console.log("Determined status:", status);
-
-		const sqlQuery = `
-      INSERT INTO Elections (ElectionName, ElectionType, ElectionDate, ElectionYear, Status, VotingStart, VotingEnd)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-
-		console.log("About to execute query with parameters:", [
-			electionName,
-			electionType,
-			formattedElectionDate,
-			electionYear,
-			status,
-			formattedVotingStart,
-			formattedVotingEnd,
-		]);
+		const sqlQuery = `INSERT INTO Elections (ElectionName, ElectionType, ElectionDate, ElectionYear, Status, VotingStart, VotingEnd) VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
 		const result = await query(sqlQuery, [
 			electionName,
@@ -177,8 +187,6 @@ export async function createElection(
 			formattedVotingStart,
 			formattedVotingEnd,
 		]);
-
-		console.log("Query executed successfully, result:", result);
 
 		return { success: true, message: "Election created successfully" };
 	} catch (error) {
@@ -194,21 +202,7 @@ export async function createElection(
 // Get completed elections with results
 export async function getCompletedElectionsWithResults() {
 	try {
-		const sqlQuery = `      SELECT 
-        e.ElectionID,
-        e.ElectionName,
-        e.ElectionType,
-        e.ElectionDate,
-        e.ElectionYear,
-        e.Status,
-        e.VotingStart,
-        e.VotingEnd,
-        COUNT(v.VoteNo) as TotalVotes
-      FROM Elections e
-      LEFT JOIN OnlineVotes v ON e.ElectionID = v.ElectionID
-      GROUP BY e.ElectionID, e.ElectionName, e.ElectionType, e.ElectionDate, e.ElectionYear, e.Status, e.VotingStart, e.VotingEnd
-      ORDER BY e.VotingEnd DESC
-    `;
+		const sqlQuery = `SELECT e.ElectionID, e.ElectionName, e.ElectionType, e.ElectionDate, e.ElectionYear, e.Status, e.VotingStart, e.VotingEnd, COUNT(v.VoteNo) as TotalVotes FROM Elections e LEFT JOIN OnlineVotes v ON e.ElectionID = v.ElectionID GROUP BY e.ElectionID, e.ElectionName, e.ElectionType, e.ElectionDate, e.ElectionYear, e.Status, e.VotingStart, e.VotingEnd ORDER BY e.VotingEnd DESC`;
 
 		const result = await query(sqlQuery);
 
@@ -217,23 +211,13 @@ export async function getCompletedElectionsWithResults() {
 			const now = new Date();
 			const endDate = new Date(election.VotingEnd || election.col7);
 			return now > endDate; // Election is completed if current time is past end date
-		});
-		// For each election, get the candidate results
+		}); // For each election, get the candidate results
 		const electionsWithResults = await Promise.all(
 			completedElections.map(async (election: any) => {
-				const candidateResultsQuery = `
-          SELECT 
-            c.CandidateName,
-            c.PartyName,
-            COUNT(v.VoteNo) as VoteCount
-          FROM Candidates c
-          LEFT JOIN OnlineVotes v ON c.CandidateID = v.CandidateID
-          WHERE c.ElectionID = ?
-          GROUP BY c.CandidateID, c.CandidateName, c.PartyName
-          ORDER BY VoteCount DESC
-        `;
+				const candidateResultsQuery = `SELECT c.CandidateName, c.PartyName, COUNT(v.VoteNo) as VoteCount FROM Candidates c LEFT JOIN OnlineVotes v ON c.CandidateID = v.CandidateID AND v.ElectionID = ? WHERE c.ElectionID = ? GROUP BY c.CandidateID, c.CandidateName, c.PartyName ORDER BY VoteCount DESC`;
 
 				const candidateResults = await query(candidateResultsQuery, [
+					election.ElectionID || election.col0,
 					election.ElectionID || election.col0,
 				]);
 
@@ -283,11 +267,7 @@ export async function castVote(
 ) {
 	try {
 		// First check if voter has already voted in this election
-		const checkVoteQuery = `
-      SELECT VoteNo FROM OnlineVotes 
-      WHERE ElectionID = ? AND CNIC = ?
-    `;
-
+		const checkVoteQuery = `SELECT VoteNo FROM OnlineVotes WHERE ElectionID = ? AND CNIC = ?`;
 		const existingVote = await query(checkVoteQuery, [electionId, voterCNIC]);
 
 		if (existingVote.rows.length > 0) {
@@ -295,14 +275,28 @@ export async function castVote(
 		}
 
 		// Get candidate's constituency for the vote
-		const candidateQuery = `
-      SELECT Constituency FROM Candidates 
-      WHERE CandidateID = ?
-    `;
+		const candidateQuery = `SELECT Constituency FROM Candidates WHERE CandidateID = ?`;
 		const candidateResult = await query(candidateQuery, [candidateId]);
 
 		if (candidateResult.rows.length === 0) {
-			throw new Error("Invalid candidate");
+			// Check what candidates exist for this election
+			const allCandidatesQuery = `SELECT CandidateID, CandidateName FROM Candidates WHERE ElectionID = ?`;
+			const allCandidates = await query(allCandidatesQuery, [electionId]);
+
+			if (allCandidates.rows.length === 0) {
+				throw new Error(
+					"No candidates have been added to this election yet. Please contact the administrator."
+				);
+			} else {
+				throw new Error(
+					`Invalid candidate ID. Available candidates: ${allCandidates.rows
+						.map(
+							(c: any) =>
+								`${c.CandidateID || c.col0}: ${c.CandidateName || c.col1}`
+						)
+						.join(", ")}`
+				);
+			}
 		}
 
 		const constituency =
@@ -310,26 +304,19 @@ export async function castVote(
 
 		// Check if voter exists, if not create a basic voter record
 		// This is required because OnlineVotes has foreign key constraint to Voters table
-		const voterCheckQuery = `
-      SELECT CNIC FROM Voters WHERE CNIC = ?
-    `;
+		const voterCheckQuery = `SELECT CNIC FROM Voters WHERE CNIC = ?`;
 		const existingVoter = await query(voterCheckQuery, [voterCNIC]);
 
 		if (existingVoter.rows.length === 0) {
 			// Create a basic voter record to satisfy foreign key constraint
-			const createVoterQuery = `
-        INSERT INTO Voters (CNIC, VoterName, Age, City, Province, Gender, Email, PhoneNumber, OnlineStatus)
-        VALUES (?, 'Online Voter', 25, 'Unknown', 'Unknown', 'M', ?, '0300-0000000', 'Active')
-      `;
+			const createVoterQuery = `INSERT INTO Voters (CNIC, VoterName, Age, City, Province, Gender, Email, PhoneNumber, OnlineStatus) VALUES (?, 'Online Voter', 25, 'Unknown', 'Unknown', 'M', ?, ?, 'Active')`;
 			const voterEmail = `voter${voterCNIC.replace(/-/g, "")}@temp.com`;
-			await query(createVoterQuery, [voterCNIC, voterEmail]);
+			const voterPhone = `0300-${voterCNIC.slice(-7)}`; // Use last 7 digits of CNIC for unique phone
+			await query(createVoterQuery, [voterCNIC, voterEmail, voterPhone]);
 		}
 
 		// Cast the vote - using OnlineVotes table as per SQL schema
-		const castVoteQuery = `
-      INSERT INTO OnlineVotes (ElectionID, CandidateID, CNIC, VoteDate, Constituency, VotingLocation)
-      VALUES (?, ?, ?, GETDATE(), ?, 'Online Platform')
-    `;
+		const castVoteQuery = `INSERT INTO OnlineVotes (ElectionID, CandidateID, CNIC, VoteDate, Constituency, VotingLocation) VALUES (?, ?, ?, GETDATE(), ?, 'Online Platform')`;
 
 		await query(castVoteQuery, [
 			electionId,
@@ -347,6 +334,25 @@ export async function castVote(
 	}
 }
 
+// Get results for a specific election
+export async function getElectionResults(electionId: number) {
+	try {
+		const sqlQuery = `SELECT c.CandidateID, c.CandidateName, c.PartyName, COUNT(ov.VoteNo) as VoteCount FROM Candidates c LEFT JOIN OnlineVotes ov ON c.CandidateID = ov.CandidateID AND ov.ElectionID = ? WHERE c.ElectionID = ? GROUP BY c.CandidateID, c.CandidateName, c.PartyName ORDER BY VoteCount DESC, c.CandidateName`;
+
+		const result = await query(sqlQuery, [electionId, electionId]);
+
+		return result.rows.map((row: any) => ({
+			CandidateID: row.CandidateID || row.col0,
+			CandidateName: row.CandidateName || row.col1,
+			PartyName: row.PartyName || row.col2,
+			VoteCount: row.VoteCount || row.col3 || 0,
+		}));
+	} catch (error) {
+		console.error("Error fetching election results:", error);
+		return [];
+	}
+}
+
 // Add a new candidate to an election
 export async function addCandidate(
 	electionId: number,
@@ -358,10 +364,7 @@ export async function addCandidate(
 	candidateAge: number
 ) {
 	try {
-		const sqlQuery = `
-      INSERT INTO Candidates (CandidateName, PartyName, ElectionSymbol, Constituency, Province, CandidateAge, ElectionID)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
+		const sqlQuery = `INSERT INTO Candidates (CandidateName, PartyName, ElectionSymbol, Constituency, Province, CandidateAge, ElectionID) VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
 		await query(sqlQuery, [
 			candidateName,

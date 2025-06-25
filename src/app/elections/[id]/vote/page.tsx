@@ -27,12 +27,17 @@ export default function VotePage() {
 	const [loading, setLoading] = useState(true);
 	const [voting, setVoting] = useState(false);
 	const [message, setMessage] = useState("");
-
 	useEffect(() => {
 		async function fetchCandidates() {
 			try {
 				const candidatesData = await getCandidatesByElection(electionId);
 				setCandidates(candidatesData);
+
+				if (candidatesData.length === 0) {
+					setMessage(
+						"No candidates have been added to this election yet. Please contact the administrator."
+					);
+				}
 			} catch (error) {
 				console.error("Error fetching candidates:", error);
 				setMessage("Error loading candidates");
@@ -73,7 +78,8 @@ export default function VotePage() {
 				setMessage(result.message);
 			}
 		} catch (error) {
-			setMessage("Error casting vote");
+			console.error("Voting error:", error);
+			setMessage(error instanceof Error ? error.message : "Error casting vote");
 		} finally {
 			setVoting(false);
 		}
@@ -134,13 +140,12 @@ export default function VotePage() {
 						<p className="text-xs text-gray-500 mt-1">
 							Your CNIC is required to prevent duplicate voting
 						</p>
-					</div>
+					</div>{" "}
 					<RadioGroup
 						value={selectedCandidate}
 						onValueChange={setSelectedCandidate}
 						className="space-y-4"
 					>
-						{" "}
 						{candidates.map((candidate) => (
 							<div
 								key={candidate.CandidateID}
@@ -156,7 +161,6 @@ export default function VotePage() {
 										htmlFor={candidate.CandidateID.toString()}
 										className="cursor-pointer"
 									>
-										{" "}
 										<div className="border rounded-lg p-4 hover:bg-gray-50">
 											<h3 className="font-semibold text-lg">
 												{candidate.CandidateName}
@@ -181,11 +185,16 @@ export default function VotePage() {
 								!selectedCandidate ||
 								!voterCNIC ||
 								voterCNIC.length !== 13 ||
-								voting
+								voting ||
+								candidates.length === 0
 							}
 							className="flex-1"
 						>
-							{voting ? "Casting Vote..." : "Cast Vote"}
+							{voting
+								? "Casting Vote..."
+								: candidates.length === 0
+								? "No Candidates Available"
+								: "Cast Vote"}
 						</Button>
 						<Button
 							variant="outline"

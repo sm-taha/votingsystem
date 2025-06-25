@@ -4,6 +4,12 @@ import { useState } from "react";
 import { addCandidate } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	getConstituencySuggestions,
+	validateAndGetConstituency,
+	normalizeConstituencyCode,
+	type ConstituencyInfo,
+} from "@/lib/constituencies";
 
 interface AddCandidateFormProps {
 	electionId: number;
@@ -24,18 +30,41 @@ export default function AddCandidateForm({
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const [message, setMessage] = useState("");
-
+	const [constituencyError, setConstituencyError] = useState("");
+	const [constituencySuggestions, setConstituencySuggestions] = useState<
+		ConstituencyInfo[]
+	>([]);
+	const [showSuggestions, setShowSuggestions] = useState(false);
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setIsLoading(true);
 		setMessage("");
+		setConstituencyError("");
+
+		// Validate constituency
+		const constituencyValidation = validateAndGetConstituency(
+			formData.constituency
+		);
+		if (!constituencyValidation.isValid) {
+			setConstituencyError(
+				constituencyValidation.error || "Invalid constituency"
+			);
+			setIsLoading(false);
+			return;
+		}
+
+		// Normalize the constituency code
+		const normalizedConstituency = normalizeConstituencyCode(
+			formData.constituency
+		);
+
 		try {
 			const result = await addCandidate(
 				electionId,
 				formData.candidateName,
 				formData.partyName,
 				formData.electionSymbol,
-				formData.constituency,
+				normalizedConstituency,
 				formData.province,
 				formData.candidateAge
 			);
@@ -61,7 +90,6 @@ export default function AddCandidateForm({
 			setIsLoading(false);
 		}
 	};
-
 	const handleChange = (
 		e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
 	) => {
@@ -70,6 +98,33 @@ export default function AddCandidateForm({
 			...prev,
 			[name]: name === "candidateAge" ? parseInt(value) : value,
 		}));
+	};
+
+	const handleConstituencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = e.target.value;
+		setFormData((prev) => ({ ...prev, constituency: value }));
+		setConstituencyError("");
+
+		// Get suggestions
+		const suggestions = getConstituencySuggestions(value, 5);
+		setConstituencySuggestions(suggestions);
+		setShowSuggestions(value.length > 0 && suggestions.length > 0);
+
+		// If the user types a complete constituency code, validate it
+		if (value.length >= 4) {
+			const validation = validateAndGetConstituency(value);
+			if (!validation.isValid && value.trim() !== "") {
+				setConstituencyError(validation.error || "Invalid constituency");
+			}
+		}
+	};
+
+	const handleConstituencySuggestionClick = (
+		constituency: ConstituencyInfo
+	) => {
+		setFormData((prev) => ({ ...prev, constituency: constituency.code }));
+		setShowSuggestions(false);
+		setConstituencyError("");
 	};
 	const politicalParties = [
 		"PML-N",
@@ -126,7 +181,6 @@ export default function AddCandidateForm({
 							placeholder="Enter candidate's full name"
 						/>
 					</div>
-
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<div>
 							<label
@@ -175,10 +229,9 @@ export default function AddCandidateForm({
 								))}
 							</select>
 						</div>
-					</div>
-
+					</div>{" "}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
+						<div className="relative">
 							<label
 								htmlFor="constituency"
 								className="block text-sm font-medium mb-2"
@@ -190,11 +243,46 @@ export default function AddCandidateForm({
 								id="constituency"
 								name="constituency"
 								value={formData.constituency}
-								onChange={handleChange}
+								onChange={handleConstituencyChange}
+								onFocus={() =>
+									setShowSuggestions(constituencySuggestions.length > 0)
+								}
+								onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
 								required
-								className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+								className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+									constituencyError ? "border-red-500" : "border-gray-300"
+								}`}
 								placeholder="e.g., NA-125, PP-158"
 							/>
+							{constituencyError && (
+								<p className="text-red-500 text-sm mt-1">{constituencyError}</p>
+							)}
+							{!constituencyError && formData.constituency === "" && (
+								<p className="text-gray-500 text-sm mt-1">
+									Format: NA-125 (National), PP-158 (Punjab), PS-95 (Sindh),
+									PK-71 (KPK), PB-40 (Balochistan)
+								</p>
+							)}
+
+							{/* Constituency Suggestions Dropdown */}
+							{showSuggestions && constituencySuggestions.length > 0 && (
+								<div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+									{constituencySuggestions.map((constituency) => (
+										<div
+											key={constituency.code}
+											className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+											onClick={() =>
+												handleConstituencySuggestionClick(constituency)
+											}
+										>
+											<div className="font-medium">{constituency.code}</div>
+											<div className="text-sm text-gray-600">
+												{constituency.name} • {constituency.province}
+											</div>
+										</div>
+									))}
+								</div>
+							)}
 						</div>
 
 						<div>
@@ -220,7 +308,6 @@ export default function AddCandidateForm({
 							</select>
 						</div>
 					</div>
-
 					<div>
 						<label
 							htmlFor="candidateAge"
@@ -240,7 +327,6 @@ export default function AddCandidateForm({
 							className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
-
 					{message && (
 						<div
 							className={`p-4 rounded-md ${
@@ -252,7 +338,6 @@ export default function AddCandidateForm({
 							{message}
 						</div>
 					)}
-
 					<Button
 						type="submit"
 						disabled={isLoading}
