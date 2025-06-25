@@ -10,6 +10,9 @@
 !.yarn/releases
 !.yarn/versions
 
+
+FINAL_PROJECTDOCUMENTATION.md
+CLEANUP_COMPLETE.md
 # testing
 /coverage
 
