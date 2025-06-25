@@ -1,6 +1,6 @@
-# Pakistani Online Voting System
+# Online Voting System
 
-A secure, modern web-based voting system built with Next.js, TypeScript, and SQL Server for conducting transparent elections in Pakistan.
+A secure, modern web-based voting system built with Next.js, TypeScript, and SQL Server for conducting transparent elections .
 
 ## 🚀 Features
 
